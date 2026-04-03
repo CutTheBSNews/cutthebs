@@ -10,7 +10,12 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.0",
     "node-fetch": "^3.3.2",
-    "puppeteer": "^21.0.0",
+    "puppeteer-core": "^21.0.0",
     "googleapis": "^140.0.0"
+  },
+  "config": {
+    "puppeteer": {
+      "skip_download": true
+    }
   }
 }
