@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import fetch from "node-fetch";
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";
 import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
