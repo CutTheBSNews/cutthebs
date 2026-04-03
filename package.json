@@ -1,0 +1,16 @@
+{
+  "name": "cutthebs-automation",
+  "version": "2.0.0",
+  "description": "Automated daily TikTok channel — Cut The BS News",
+  "type": "module",
+  "main": "src/daily.js",
+  "scripts": {
+    "start": "node src/daily.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.20.0",
+    "node-fetch": "^3.3.2",
+    "puppeteer": "^21.0.0",
+    "googleapis": "^140.0.0"
+  }
+}
