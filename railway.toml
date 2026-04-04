@@ -2,8 +2,7 @@
 builder = "NIXPACKS"
 
 [build.env]
-NIXPACKS_APT_PKGS = "chromium-browser ffmpeg"
-PUPPETEER_SKIP_DOWNLOAD = "true"
+NIXPACKS_APT_PKGS = "ffmpeg fonts-dejavu"
 
 [deploy]
 startCommand = "node src/daily.js"
