@@ -102,8 +102,8 @@ async function renderVideo(episode, audioPath) {
     const end = (i + 2) * sceneDuration;
     const scoreText = `BS Score\\: ${s.bs_score}/10`;
     const storyNum = `Story ${i+1} of ${stories.length}`;
-    const headline = s.headline.substring(0, 40).replace(/'/g, "\\'").replace(/:/g, "\\:");
-    const body = s.body.substring(0, 60).replace(/'/g, "\\'").replace(/:/g, "\\:");
+    const headline = s.headline.substring(0, 40).replace(/[^a-zA-Z0-9 .,!?-]/g, "");
+    const body = s.body.substring(0, 60).replace(/[^a-zA-Z0-9 .,!?-]/g, "");
 
     filterStr += `drawtext=text='${storyNum}':fontcolor=0xaaaaaa:fontsize=36:x=(w-text_w)/2:y=600:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:enable='between(t,${start.toFixed(1)},${end.toFixed(1)})',`;
     filterStr += `drawtext=text='${headline}':fontcolor=white:fontsize=52:x=(w-text_w)/2:y=680:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:enable='between(t,${start.toFixed(1)},${end.toFixed(1)})',`;
