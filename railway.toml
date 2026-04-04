@@ -1,6 +1,10 @@
 [build]
 builder = "NIXPACKS"
 
+[build.env]
+NIXPACKS_APT_PKGS = "chromium-browser ffmpeg"
+PUPPETEER_SKIP_DOWNLOAD = "true"
+
 [deploy]
 startCommand = "node src/daily.js"
 restartPolicyType = "ON_FAILURE"
