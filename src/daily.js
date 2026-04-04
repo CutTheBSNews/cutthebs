@@ -96,9 +96,19 @@ async function renderVideo(episode, audioPath) {
   const htmlPath = path.join(OUTPUT, "episode.html");
   fs.writeFileSync(htmlPath, html);
 
-  const browser = await puppeteer.launch({
+const browser = await puppeteer.launch({
     headless: "new",
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--autoplay-policy=no-user-gesture-required"],
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || 
+      "/usr/bin/chromium" ||
+      "/usr/bin/chromium-browser" ||
+      "/usr/bin/google-chrome",
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox", 
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--autoplay-policy=no-user-gesture-required",
+    ],
   });
 
   const page = await browser.newPage();
