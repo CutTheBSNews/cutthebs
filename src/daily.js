@@ -95,7 +95,7 @@ async function renderVideo(episode, audioPath) {
 
   const introEnd = sceneDuration;
   filterStr += `drawtext=text='They want you scared today.':fontcolor=white:fontsize=54:x=(w-text_w)/2:y=700:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:enable='between(t,0,${introEnd.toFixed(1)})',`;
-  filterStr += `drawtext=text="This is what is actually going on.":fontcolor=0xe53e3e:fontsize=54:x=(w-text_w)/2:y=790:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:enable='between(t,0,${introEnd.toFixed(1)})',`;
+  filterStr += `drawtext=text='This is what is actually going on.':fontcolor=0xe53e3e:fontsize=54:x=(w-text_w)/2:y=790:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:enable='between(t,0,${introEnd.toFixed(1)})',`;
 
   stories.forEach((s, i) => {
     const start = (i + 1) * sceneDuration;
@@ -112,7 +112,7 @@ async function renderVideo(episode, audioPath) {
   });
 
   const outroStart = (stories.length + 1) * sceneDuration;
-  filterStr += `drawtext=text="Do not watch the news.":fontcolor=white:fontsize=60:x=(w-text_w)/2:y=700:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:enable='between(t,${outroStart.toFixed(1)},${audioDuration.toFixed(1)})',`;
+  filterStr += `drawtext=text='Do not watch the news.':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=700:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:enable='between(t,${outroStart.toFixed(1)},${audioDuration.toFixed(1)})',`;
   filterStr += `drawtext=text='Understand it.':fontcolor=0xe53e3e:fontsize=60:x=(w-text_w)/2:y=790:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:enable='between(t,${outroStart.toFixed(1)},${audioDuration.toFixed(1)})',`;
   filterStr += `drawtext=text='Follow for tomorrow.':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=900:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:enable='between(t,${outroStart.toFixed(1)},${audioDuration.toFixed(1)})'`;
   filterStr += `[v]`;
