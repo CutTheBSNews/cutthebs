@@ -15,6 +15,10 @@ const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY;
 const VOICE_ID = "nPczCjzI2devNBz1zQrb";
 const DRIVE_FOLDER_ID = "1deZ7sbxWlANuXKqfbI45YCKQ9i31ySAa";
 
+function clean(str, max) {
+  return str.substring(0, max).replace(/[^a-zA-Z0-9 .,!?]/g, " ").trim();
+}
+
 async function generateScript() {
   console.log("\n🤖 Step 1/4 — Claude is writing today's episode...");
   const client = new Anthropic({ apiKey: ANTHROPIC_KEY });
@@ -26,22 +30,22 @@ async function generateScript() {
     max_tokens: 1500,
     messages: [{
       role: "user",
-      content: `You are the writer for "Cut The BS News" — a Gen Z TikTok news channel.
-Today is ${today}. Write a punchy, casual 55-second script covering the 2-3 biggest news stories right now.
+      content: `You are the writer for "Cut The BS News" a Gen Z TikTok news channel.
+Today is ${today}. Write a punchy casual 55-second script covering the 2-3 biggest news stories right now.
 Tone: real person talking to a friend, skeptical, call out who benefits, rate each story 1-10 on life impact.
-Under 155 words total. End with "Follow for tomorrow's episode."
+Under 155 words total. End with Follow for tomorrows episode.
 
-Return ONLY valid JSON, no markdown:
+Return ONLY valid JSON no markdown:
 {
-  "title": "punchy headline under 60 chars",
-  "script": "full narration, 155 words max",
+  "title": "punchy headline under 60 chars no special characters",
+  "script": "full narration 155 words max no apostrophes or special characters",
   "stories": [
     {
-      "headline": "short punchy headline",
-      "body": "1-2 casual sentences",
+      "headline": "short punchy headline no special characters",
+      "body": "1-2 casual sentences no apostrophes or special characters",
       "bs_score": 8,
       "bs_color": "#e53e3e",
-      "agenda": "one sentence on who benefits"
+      "agenda": "one sentence on who benefits no special characters"
     }
   ],
   "hashtags": "#CutTheBSNews #News #GenZ #TikTok #fyp"
@@ -77,50 +81,70 @@ async function generateVoice(script) {
 async function renderVideo(episode, audioPath) {
   console.log("\n🎬  Step 3/4 — Rendering vertical TikTok video with ffmpeg...");
   fs.mkdirSync(OUTPUT, { recursive: true });
+
   const today = new Date().toISOString().split("T")[0];
   const videoPath = path.join(OUTPUT, `cutthebs_${today}.mp4`);
   const stories = episode.stories || [];
 
   let audioDuration = 60;
   try {
-    const probe = execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`).toString().trim();
+    const probe = execSync(
+      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`
+    ).toString().trim();
     audioDuration = parseFloat(probe) || 60;
-  } catch(e) {}
+  } catch(e) {
+    console.log("   ℹ️  Could not probe audio, using 60s default");
+  }
 
   const sceneDuration = audioDuration / (stories.length + 2);
-  const inputs = [`-f lavfi -i color=c=0x0a0a0a:size=1080x1920:rate=24`];
-  let filterStr = "[0:v]";
+  const font = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
+  const fontReg = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+  const drawLines = [];
 
-  filterStr += `drawtext=text='CUT THE BS NEWS':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=80:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:box=1:boxcolor=0xe53e3e@1.0:boxborderw=20,`;
+  drawLines.push(`drawtext=fontfile=${font}:text='CUT THE BS NEWS':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=80:box=1:boxcolor=0xe53e3e@1.0:boxborderw=20`);
 
-  const introEnd = sceneDuration;
-  filterStr += `drawtext=text='They want you scared today.':fontcolor=white:fontsize=54:x=(w-text_w)/2:y=700:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:enable='between(t,0,${introEnd.toFixed(1)})',`;
-  filterStr += `drawtext=text='This is what is actually going on.':fontcolor=0xe53e3e:fontsize=54:x=(w-text_w)/2:y=790:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:enable='between(t,0,${introEnd.toFixed(1)})',`;
+  const introEnd = sceneDuration.toFixed(1);
+  drawLines.push(`drawtext=fontfile=${font}:text='They want you scared today.':fontcolor=white:fontsize=54:x=(w-text_w)/2:y=700:enable='between(t,0,${introEnd})'`);
+  drawLines.push(`drawtext=fontfile=${font}:text='Here is what is actually going on.':fontcolor=0xe53e3e:fontsize=48:x=(w-text_w)/2:y=790:enable='between(t,0,${introEnd})'`);
 
   stories.forEach((s, i) => {
-    const start = (i + 1) * sceneDuration;
-    const end = (i + 2) * sceneDuration;
-    const scoreText = `BS Score\\: ${s.bs_score}/10`;
+    const start = ((i + 1) * sceneDuration).toFixed(1);
+    const end = ((i + 2) * sceneDuration).toFixed(1);
     const storyNum = `Story ${i+1} of ${stories.length}`;
-    const headline = s.headline.substring(0, 40).replace(/[^a-zA-Z0-9 .,!?-]/g, "");
-    const body = s.body.substring(0, 60).replace(/[^a-zA-Z0-9 .,!?-]/g, "");
+    const headline = clean(s.headline, 35);
+    const body = clean(s.body, 55);
+    const score = `BS Score  ${s.bs_score} out of 10`;
+    const color = s.bs_color || "#e53e3e";
 
-    filterStr += `drawtext=text='${storyNum}':fontcolor=0xaaaaaa:fontsize=36:x=(w-text_w)/2:y=600:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:enable='between(t,${start.toFixed(1)},${end.toFixed(1)})',`;
-    filterStr += `drawtext=text='${headline}':fontcolor=white:fontsize=52:x=(w-text_w)/2:y=680:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:enable='between(t,${start.toFixed(1)},${end.toFixed(1)})',`;
-    filterStr += `drawtext=text='${body}':fontcolor=0xbbbbbb:fontsize=38:x=(w-text_w)/2:y=800:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:enable='between(t,${start.toFixed(1)},${end.toFixed(1)})',`;
-    filterStr += `drawtext=text='${scoreText}':fontcolor=${s.bs_color}:fontsize=72:x=(w-text_w)/2:y=950:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:enable='between(t,${start.toFixed(1)},${end.toFixed(1)})',`;
+    drawLines.push(`drawtext=fontfile=${fontReg}:text='${storyNum}':fontcolor=0xaaaaaa:fontsize=36:x=(w-text_w)/2:y=580:enable='between(t,${start},${end})'`);
+    drawLines.push(`drawtext=fontfile=${font}:text='${headline}':fontcolor=white:fontsize=52:x=(w-text_w)/2:y=650:enable='between(t,${start},${end})'`);
+    drawLines.push(`drawtext=fontfile=${fontReg}:text='${body}':fontcolor=0xbbbbbb:fontsize=36:x=(w-text_w)/2:y=760:enable='between(t,${start},${end})'`);
+    drawLines.push(`drawtext=fontfile=${font}:text='${score}':fontcolor=${color}:fontsize=64:x=(w-text_w)/2:y=920:enable='between(t,${start},${end})'`);
   });
 
-  const outroStart = (stories.length + 1) * sceneDuration;
-  filterStr += `drawtext=text='Do not watch the news.':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=700:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:enable='between(t,${outroStart.toFixed(1)},${audioDuration.toFixed(1)})',`;
-  filterStr += `drawtext=text='Understand it.':fontcolor=0xe53e3e:fontsize=60:x=(w-text_w)/2:y=790:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:enable='between(t,${outroStart.toFixed(1)},${audioDuration.toFixed(1)})',`;
-  filterStr += `drawtext=text='Follow for tomorrow.':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=900:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:enable='between(t,${outroStart.toFixed(1)},${audioDuration.toFixed(1)})'`;
-  filterStr += `[v]`;
+  const outroStart = ((stories.length + 1) * sceneDuration).toFixed(1);
+  const outroEnd = audioDuration.toFixed(1);
+  drawLines.push(`drawtext=fontfile=${font}:text='Do not watch the news.':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=700:enable='between(t,${outroStart},${outroEnd})'`);
+  drawLines.push(`drawtext=fontfile=${font}:text='Understand it.':fontcolor=0xe53e3e:fontsize=60:x=(w-text_w)/2:y=800:enable='between(t,${outroStart},${outroEnd})'`);
+  drawLines.push(`drawtext=fontfile=${fontReg}:text='Follow for tomorrows episode.':fontcolor=white:fontsize=44:x=(w-text_w)/2:y=900:enable='between(t,${outroStart},${outroEnd})'`);
 
-  const cmd = `ffmpeg -y ${inputs.join(" ")} -i "${audioPath}" -filter_complex "${filterStr}" -map "[v]" -map 1:a -c:v libx264 -c:a aac -shortest -pix_fmt yuv420p -t ${audioDuration.toFixed(1)} "${videoPath}"`;
+  const filterStr = `[0:v]${drawLines.join(",")}[v]`;
+  const scriptPath = path.join(OUTPUT, "render.sh");
+  const ffmpegCmd = [
+    "ffmpeg -y",
+    `-f lavfi -i color=c=0x0a0a0a:size=1080x1920:rate=24`,
+    `-i "${audioPath}"`,
+    `-filter_complex "${filterStr}"`,
+    `-map "[v]" -map 1:a`,
+    `-c:v libx264 -c:a aac -shortest -pix_fmt yuv420p`,
+    `-t ${audioDuration.toFixed(1)}`,
+    `"${videoPath}"`
+  ].join(" ");
 
+  fs.writeFileSync(scriptPath, `#!/bin/sh\n${ffmpegCmd}\n`);
+  execSync(`chmod +x "${scriptPath}"`);
   console.log("   ⏳ Encoding video...");
-  execSync(cmd, { stdio: "inherit" });
+  execSync(`sh "${scriptPath}"`, { stdio: "inherit" });
   console.log(`   ✅ Video saved.`);
   return videoPath;
 }
@@ -157,6 +181,7 @@ async function run() {
     console.log("\n✅ ALL DONE! Check your Google Drive folder.\n");
   } catch (err) {
     console.error("\n❌ Error:", err.message);
+    console.error(err.stack);
     process.exit(1);
   }
 }
