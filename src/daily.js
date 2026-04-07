@@ -136,7 +136,7 @@ async function renderVideo(episode, audioPath) {
     `-i "${audioPath}"`,
     `-filter_complex "${filterStr}"`,
     `-map "[v]" -map 1:a`,
-    `-c:v libx264 -c:a aac -shortest -pix_fmt yuv420p`,
+    `-c:v libx264 -preset ultrafast -crf 35 -c:a aac -shortest -pix_fmt yuv420p -threads 1`, 
     `-t ${audioDuration.toFixed(1)}`,
     `"${videoPath}"`
   ].join(" ");
