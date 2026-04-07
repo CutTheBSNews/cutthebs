@@ -4,7 +4,6 @@ import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
 import { fileURLToPath } from "url";
-import { google } from "googleapis";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
@@ -12,11 +11,11 @@ const OUTPUT = path.join(ROOT, "output");
 
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY;
+const DROPBOX_TOKEN = process.env.DROPBOX_TOKEN;
 const VOICE_ID = "nPczCjzI2devNBz1zQrb";
-const DRIVE_FOLDER_ID = "1deZ7sbxWlANuXKqfbI45YCKQ9i31ySAa";
 
 function clean(str, max) {
-  return str.substring(0, max).replace(/[^a-zA-Z0-9 .,!?]/g, " ").trim();
+  return (str || "").substring(0, max).replace(/[^a-zA-Z0-9 .,!?]/g, " ").trim();
 }
 
 async function generateScript() {
@@ -34,18 +33,21 @@ async function generateScript() {
 Today is ${today}. Write a punchy casual 55-second script covering the 2-3 biggest news stories right now.
 Tone: real person talking to a friend, skeptical, call out who benefits, rate each story 1-10 on life impact.
 Under 155 words total. End with Follow for tomorrows episode.
+No apostrophes or special characters anywhere in any text field.
 
 Return ONLY valid JSON no markdown:
 {
-  "title": "punchy headline under 60 chars no special characters",
-  "script": "full narration 155 words max no apostrophes or special characters",
+  "title": "punchy headline under 60 chars no special chars",
+  "script": "full narration 155 words max no apostrophes no special characters",
   "stories": [
     {
-      "headline": "short punchy headline no special characters",
-      "body": "1-2 casual sentences no apostrophes or special characters",
+      "headline": "short punchy headline under 35 chars no special chars",
+      "category": "one word like ECONOMY or POLITICS or TECH or WORLD",
+      "body": "1-2 casual sentences no apostrophes no special characters",
       "bs_score": 8,
       "bs_color": "#e53e3e",
-      "agenda": "one sentence on who benefits no special characters"
+      "agenda": "one sentence on who benefits no special characters",
+      "image_search": "2-3 words for image search eg oil prices protest"
     }
   ],
   "hashtags": "#CutTheBSNews #News #GenZ #TikTok #fyp"
@@ -56,6 +58,27 @@ Return ONLY valid JSON no markdown:
   const episode = JSON.parse(raw);
   console.log(`   ✅ Title: "${episode.title}"`);
   return episode;
+}
+
+async function downloadImages(stories) {
+  console.log("\n🖼️  Downloading story images...");
+  const imgDir = path.join(OUTPUT, "images");
+  fs.mkdirSync(imgDir, { recursive: true });
+  const imagePaths = [];
+  const fallbackColors = ["1a0505", "050518", "051a05", "181805"];
+
+  for (let i = 0; i < stories.length; i++) {
+    const imgPath = path.join(imgDir, `story_${i}.jpg`);
+    try {
+      const color = fallbackColors[i % fallbackColors.length];
+      execSync(`ffmpeg -y -f lavfi -i color=c=0x${color}:size=1080x1920:rate=24 -frames:v 1 "${imgPath}" 2>/dev/null || true`);
+      imagePaths.push(imgPath);
+      console.log(`   ✅ Background ${i+1} ready`);
+    } catch(e) {
+      imagePaths.push(null);
+    }
+  }
+  return imagePaths;
 }
 
 async function generateVoice(script) {
@@ -78,79 +101,141 @@ async function generateVoice(script) {
   return audioPath;
 }
 
-async function renderVideo(episode, audioPath) {
-  console.log("\n🎬  Step 3/4 — Rendering vertical TikTok video with ffmpeg...");
+async function renderVideo(episode, audioPath, imagePaths) {
+  console.log("\n🎬  Step 3/4 — Rendering news broadcast video...");
   fs.mkdirSync(OUTPUT, { recursive: true });
 
   const today = new Date().toISOString().split("T")[0];
   const videoPath = path.join(OUTPUT, `cutthebs_${today}.mp4`);
   const stories = episode.stories || [];
 
-  let audioDuration = 60;
+  let audioDuration = 55;
   try {
-    const probe = execSync(
-      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`
-    ).toString().trim();
-    audioDuration = parseFloat(probe) || 60;
-  } catch(e) {
-    console.log("   ℹ️  Could not probe audio, using 60s default");
-  }
+    const probe = execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`).toString().trim();
+    audioDuration = parseFloat(probe) || 55;
+  } catch(e) {}
 
   const sceneDuration = audioDuration / (stories.length + 2);
-  const font = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
-  const fontReg = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
-  const drawLines = [];
+  const fontB = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
+  const fontR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
 
-  drawLines.push(`drawtext=fontfile=${font}:text='CUT THE BS NEWS':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=80:box=1:boxcolor=0xe53e3e@1.0:boxborderw=20`);
+  const inputs = [];
+  inputs.push(`-f lavfi -i color=c=0x0d0d0d:size=1080x1920:rate=24`);
 
-  const introEnd = sceneDuration.toFixed(1);
-  drawLines.push(`drawtext=fontfile=${font}:text='They want you scared today.':fontcolor=white:fontsize=54:x=(w-text_w)/2:y=700:enable='between(t,0,${introEnd})'`);
-  drawLines.push(`drawtext=fontfile=${font}:text='Here is what is actually going on.':fontcolor=0xe53e3e:fontsize=48:x=(w-text_w)/2:y=790:enable='between(t,0,${introEnd})'`);
-
-  stories.forEach((s, i) => {
-    const start = ((i + 1) * sceneDuration).toFixed(1);
-    const end = ((i + 2) * sceneDuration).toFixed(1);
-    const storyNum = `Story ${i+1} of ${stories.length}`;
-    const headline = clean(s.headline, 35);
-    const body = clean(s.body, 55);
-    const score = `BS Score  ${s.bs_score} out of 10`;
-    const color = s.bs_color || "#e53e3e";
-
-    drawLines.push(`drawtext=fontfile=${fontReg}:text='${storyNum}':fontcolor=0xaaaaaa:fontsize=36:x=(w-text_w)/2:y=580:enable='between(t,${start},${end})'`);
-    drawLines.push(`drawtext=fontfile=${font}:text='${headline}':fontcolor=white:fontsize=52:x=(w-text_w)/2:y=650:enable='between(t,${start},${end})'`);
-    drawLines.push(`drawtext=fontfile=${fontReg}:text='${body}':fontcolor=0xbbbbbb:fontsize=36:x=(w-text_w)/2:y=760:enable='between(t,${start},${end})'`);
-    drawLines.push(`drawtext=fontfile=${font}:text='${score}':fontcolor=${color}:fontsize=64:x=(w-text_w)/2:y=920:enable='between(t,${start},${end})'`);
+  imagePaths.forEach((imgPath, i) => {
+    if (imgPath && fs.existsSync(imgPath)) {
+      inputs.push(`-loop 1 -i "${imgPath}"`);
+    } else {
+      const colors = ["1a0505", "050518", "051a05", "181805"];
+      inputs.push(`-f lavfi -i color=c=0x${colors[i % colors.length]}:size=1080x1920:rate=24`);
+    }
   });
 
-  const outroStart = ((stories.length + 1) * sceneDuration).toFixed(1);
-  const outroEnd = audioDuration.toFixed(1);
-  drawLines.push(`drawtext=fontfile=${font}:text='Do not watch the news.':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=700:enable='between(t,${outroStart},${outroEnd})'`);
-  drawLines.push(`drawtext=fontfile=${font}:text='Understand it.':fontcolor=0xe53e3e:fontsize=60:x=(w-text_w)/2:y=800:enable='between(t,${outroStart},${outroEnd})'`);
-  drawLines.push(`drawtext=fontfile=${fontReg}:text='Follow for tomorrows episode.':fontcolor=white:fontsize=44:x=(w-text_w)/2:y=900:enable='between(t,${outroStart},${outroEnd})'`);
+  const audioInputIdx = inputs.length;
+  inputs.push(`-i "${audioPath}"`);
 
-  const filterStr = `[0:v]${drawLines.join(",")}[v]`;
+  const filterParts = [];
+  const imgCount = imagePaths.length;
+
+  for (let i = 0; i < imgCount; i++) {
+    filterParts.push(`[${i+1}:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[img${i}]`);
+  }
+
+  filterParts.push(`[0:v]setsar=1[base]`);
+
+  let lastLabel = "base";
+  stories.forEach((s, i) => {
+    const start = ((i + 1) * sceneDuration).toFixed(2);
+    const end = ((i + 2) * sceneDuration).toFixed(2);
+    const newLabel = `scene${i}`;
+    filterParts.push(`[${lastLabel}][img${i}]overlay=0:0:enable='between(t,${start},${end})'[${newLabel}]`);
+    lastLabel = newLabel;
+  });
+
+  const drawLines = [];
+
+  // Top bar
+  drawLines.push(`drawbox=x=0:y=0:w=1080:h=110:color=0xe53e3e@1.0:t=fill`);
+  drawLines.push(`drawtext=fontfile=${fontB}:text='CUT THE BS NEWS':fontcolor=white:fontsize=44:x=(w-text_w)/2:y=35`);
+
+  // Intro
+  const introEnd = sceneDuration.toFixed(2);
+  drawLines.push(`drawbox=x=0:y=1580:w=1080:h=340:color=0x000000@0.88:t=fill:enable='between(t,0,${introEnd})'`);
+  drawLines.push(`drawtext=fontfile=${fontB}:text='They want you scared today.':fontcolor=white:fontsize=52:x=(w-text_w)/2:y=1610:enable='between(t,0,${introEnd})'`);
+  drawLines.push(`drawtext=fontfile=${fontB}:text='Here is what is actually going on.':fontcolor=0xff4444:fontsize=40:x=(w-text_w)/2:y=1685:enable='between(t,0,${introEnd})'`);
+  drawLines.push(`drawtext=fontfile=${fontR}:text='Every story gets a BS Meter score':fontcolor=0xaaaaaa:fontsize=32:x=(w-text_w)/2:y=1755:enable='between(t,0,${introEnd})'`);
+
+  // Stories
+  stories.forEach((s, i) => {
+    const start = ((i + 1) * sceneDuration).toFixed(2);
+    const end = ((i + 2) * sceneDuration).toFixed(2);
+    const headline = clean(s.headline, 32);
+    const body1 = clean(s.body, 50);
+    const body2 = clean(s.body.substring(50), 50);
+    const category = clean(s.category || "NEWS", 12).toUpperCase();
+    const agenda = clean(s.agenda, 48);
+    const score = s.bs_score || 5;
+    const bsColor = (score >= 8) ? "0xff3333" : (score >= 6) ? "0xff9900" : "0x33cc33";
+    const bsBar = Math.round((score / 10) * 780);
+
+    drawLines.push(`drawbox=x=0:y=1470:w=1080:h=450:color=0x000000@0.88:t=fill:enable='between(t,${start},${end})'`);
+    drawLines.push(`drawbox=x=30:y=1480:w=180:h=40:color=0xe53e3e@1.0:t=fill:enable='between(t,${start},${end})'`);
+    drawLines.push(`drawtext=fontfile=${fontB}:text='${category}':fontcolor=white:fontsize=24:x=40:y=1488:enable='between(t,${start},${end})'`);
+    drawLines.push(`drawtext=fontfile=${fontR}:text='STORY ${i+1} OF ${stories.length}':fontcolor=0xaaaaaa:fontsize=24:x=230:y=1488:enable='between(t,${start},${end})'`);
+    drawLines.push(`drawbox=x=0:y=1527:w=1080:h=4:color=0xe53e3e@0.6:t=fill:enable='between(t,${start},${end})'`);
+    drawLines.push(`drawtext=fontfile=${fontB}:text='${headline}':fontcolor=white:fontsize=50:x=30:y=1542:enable='between(t,${start},${end})'`);
+    drawLines.push(`drawtext=fontfile=${fontR}:text='${body1}':fontcolor=0xdddddd:fontsize=30:x=30:y=1608:enable='between(t,${start},${end})'`);
+    if (body2.length > 2) {
+      drawLines.push(`drawtext=fontfile=${fontR}:text='${body2}':fontcolor=0xdddddd:fontsize=30:x=30:y=1645:enable='between(t,${start},${end})'`);
+    }
+    drawLines.push(`drawtext=fontfile=${fontB}:text='BS METER':fontcolor=0xaaaaaa:fontsize=22:x=30:y=1700:enable='between(t,${start},${end})'`);
+    drawLines.push(`drawbox=x=30:y=1728:w=780:h=16:color=0x333333@1.0:t=fill:enable='between(t,${start},${end})'`);
+    drawLines.push(`drawbox=x=30:y=1728:w=${bsBar}:h=16:color=${bsColor}@1.0:t=fill:enable='between(t,${start},${end})'`);
+    drawLines.push(`drawtext=fontfile=${fontB}:text='${score}/10':fontcolor=${bsColor}:fontsize=30:x=830:y=1722:enable='between(t,${start},${end})'`);
+    drawLines.push(`drawbox=x=0:y=1758:w=1080:h=75:color=0xe53e3e@0.12:t=fill:enable='between(t,${start},${end})'`);
+    drawLines.push(`drawtext=fontfile=${fontB}:text='WHO BENEFITS:':fontcolor=0xff6666:fontsize=22:x=30:y=1768:enable='between(t,${start},${end})'`);
+    drawLines.push(`drawtext=fontfile=${fontR}:text='${agenda}':fontcolor=0xdddddd:fontsize=24:x=30:y=1798:enable='between(t,${start},${end})'`);
+  });
+
+  // Outro
+  const outroStart = ((stories.length + 1) * sceneDuration).toFixed(2);
+  const outroEnd = audioDuration.toFixed(2);
+  drawLines.push(`drawbox=x=0:y=1430:w=1080:h=490:color=0x000000@0.92:t=fill:enable='between(t,${outroStart},${outroEnd})'`);
+  drawLines.push(`drawbox=x=180:y=1455:w=720:h=5:color=0xe53e3e@1.0:t=fill:enable='between(t,${outroStart},${outroEnd})'`);
+  drawLines.push(`drawtext=fontfile=${fontB}:text='Do not watch the news.':fontcolor=white:fontsize=54:x=(w-text_w)/2:y=1480:enable='between(t,${outroStart},${outroEnd})'`);
+  drawLines.push(`drawtext=fontfile=${fontB}:text='Understand it.':fontcolor=0xff4444:fontsize=66:x=(w-text_w)/2:y=1558:enable='between(t,${outroStart},${outroEnd})'`);
+  drawLines.push(`drawbox=x=180:y=1645:w=720:h=5:color=0xe53e3e@1.0:t=fill:enable='between(t,${outroStart},${outroEnd})'`);
+  drawLines.push(`drawtext=fontfile=${fontR}:text='Follow for tomorrows episode.':fontcolor=0xaaaaaa:fontsize=36:x=(w-text_w)/2:y=1668:enable='between(t,${outroStart},${outroEnd})'`);
+  drawLines.push(`drawtext=fontfile=${fontB}:text='@CutTheBSNews':fontcolor=0xff4444:fontsize=44:x=(w-text_w)/2:y=1728:enable='between(t,${outroStart},${outroEnd})'`);
+  drawLines.push(`drawtext=fontfile=${fontR}:text='TikTok':fontcolor=0xaaaaaa:fontsize=32:x=(w-text_w)/2:y=1800:enable='between(t,${outroStart},${outroEnd})'`);
+
+  const drawFilter = drawLines.join(",");
+  const filterStr = [...filterParts, `[${lastLabel}]${drawFilter}[v]`].join(";");
+
   const scriptPath = path.join(OUTPUT, "render.sh");
   const ffmpegCmd = [
     "ffmpeg -y",
-    `-f lavfi -i color=c=0x0a0a0a:size=1080x1920:rate=24`,
-    `-i "${audioPath}"`,
+    inputs.join(" "),
     `-filter_complex "${filterStr}"`,
-    `-map "[v]" -map 1:a`,
-    `-c:v libx264 -preset ultrafast -crf 35 -c:a aac -shortest -pix_fmt yuv420p -threads 1`, 
+    `-map "[v]" -map ${audioInputIdx}:a`,
+    `-c:v libx264 -preset ultrafast -crf 28 -c:a aac -shortest -pix_fmt yuv420p -threads 1`,
     `-t ${audioDuration.toFixed(1)}`,
     `"${videoPath}"`
   ].join(" ");
 
   fs.writeFileSync(scriptPath, `#!/bin/sh\n${ffmpegCmd}\n`);
   execSync(`chmod +x "${scriptPath}"`);
-  console.log("   ⏳ Encoding video...");
+  console.log("   ⏳ Encoding broadcast...");
   execSync(`sh "${scriptPath}" || true`, { stdio: "inherit" });
-  if (!fs.existsSync(videoPath)) throw new Error("Video file was not created");
-  console.log(`   ✅ Video saved.`);
+
+  if (!fs.existsSync(videoPath) || fs.statSync(videoPath).size < 1000) {
+    throw new Error("Video file was not created properly");
+  }
+  console.log(`   ✅ Video saved. Size: ${(fs.statSync(videoPath).size / 1024 / 1024).toFixed(1)} MB`);
   return videoPath;
 }
 
-async function uploadToDrive(videoPath, title) {
+async function uploadToDropbox(videoPath) {
   console.log("\n📤  Step 4/4 — Uploading to Dropbox...");
   const today = new Date().toISOString().split("T")[0];
   const fileName = `CutTheBSNews_${today}.mp4`;
@@ -158,7 +243,7 @@ async function uploadToDrive(videoPath, title) {
   const res = await fetch("https://content.dropboxapi.com/2/files/upload", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer sl.u.AGbz0KIHdUpYJYCRkgQEICqTAONxNSgLcS-03ekvj9BMd2dVYbV0rAInMDJetcaPvkh6AuDZUxv4Dr45iXUnnNpk97IlGDQwIHRKaV9bCjx36nF4BCs_bv2zPR5262nBKVSusKiU8X1s1Q7Tr4JZFU0HAEFLQKGLkDM2EOU7ZRgX7ArFJoGUqDoeRS44pUB3zBEXvU0aQxvWSkOI-zfT_T99vBWBuIhWYsOY1jM3NamgOROR_BvSIS7FepcNoQ2CRxBhM_SGP-ZQR6e_zq-EFk2eJkSV7girK3rlwJOv6g_sUt9jCf9jbZqj57i1R_2BuQFnDa_kWrPA6ghMsbSXO2esaH6aTKyDmP_meAt0zvlZYfL3Rwkjrbt8xCcKL7PF8w9tscEJVzIf6bqbe1MbfSfjk_ehzVZATybJ8tceHkJl_j8cPKzimwwOkL2pL7eaAYy_Zg7Jn-oMSL8z9UVyxTDwQxuxd4AYJn6eeMzZfO2-NQwbHQGBtsni6ToTM_KefcEck5URXLDcVgNJa22D1SuIh9L6EC1SpVOmWQuvs0Vsp8NuTYn82WwrDvF6yOJyS3ZzBc92r_OG8StdZaPOMXJWwvjhP2dGfkRS15ZogeF-dCtXknc5iej9koV7rU5CzIxKDMxOKiI-S9C52ZegIlWHdQ8F_LVe4IkvaHG0OJvQS_bxOCXxLIalCO6qY9h3yBhoHtaFKs-zrTdTH3iZD0pFnjizGJ-ygpWh4LK07AsOvMQ2B3iht_u7by9QaWeTtca0e96uLlkAt_7STmEYHQIT-TER8eZhFRUreh1s9rPAx7zBxQVSfoJ-Dpbf7IwEgW9Ogmj765iS6W21iGbIsGfhx63Zfty35lhvSt9MZKSV1d6ghJainl__L2MvJYl1ifWF0K2gRL3NYfbAGwSHg4-43CSiGjrrn3RL4Bn9dZMkViXXb13yRDY0RTv_TIVdOmdfEz371gGU0PE15V1pcHa-l7WsfWiLz7V4pceZGPyHuBgvM9Fh9PcqLU1yMP_RAEW3AkTqCtAcNc1Syp6lCPnerTbgEWuhfLYZHTprUA4A_G08GSry4WyejM102h2tnPQHgMZ4sBpTYHb58EiLMat1GQdQR0zC4dYUxFpdjZR7HwmR3gxivV3e2IsT_lY-OxI7wMILTBQB_5AUSdgeF_I35Y3oOdcNQSwI31DjZOWMxUGx4r26B_S8su5_NHWLkTbMn5orRczR2stbniXW8vLFJ_xVxG1dVYWUqrJXRczYxR9My8WnqD1i8rwwkwPx2jptaDL8nSJTUnhs-yAOhqMrIZbzMvQ14BJXUR0LW4JUtxQQ8anjL8CgIULb40WQM-IhsbldEfMQZcjBqmURVl_3tv3Ge8FHkPG6EEsoBaIxG9j-JnuKq2uu_vU14VQgfBc`,
+      "Authorization": `Bearer ${DROPBOX_TOKEN}`,
       "Dropbox-API-Arg": JSON.stringify({ path: `/CutTheBSNews/${fileName}`, mode: "overwrite", autorename: true }),
       "Content-Type": "application/octet-stream",
     },
@@ -166,7 +251,7 @@ async function uploadToDrive(videoPath, title) {
   });
   if (!res.ok) throw new Error(`Dropbox upload failed: ${await res.text()}`);
   const data = await res.json();
-  console.log(`   ✅ Uploaded to Dropbox: ${data.path_display}`);
+  console.log(`   ✅ Uploaded: ${data.path_display}`);
   return data;
 }
 
@@ -177,10 +262,11 @@ async function run() {
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   try {
     const episode = await generateScript();
+    const imagePaths = await downloadImages(episode.stories || []);
     const audioPath = await generateVoice(episode.script);
-    const videoPath = await renderVideo(episode, audioPath);
-    await uploadToDrive(videoPath, episode.title);
-    console.log("\n✅ ALL DONE! Check your Google Drive folder.\n");
+    const videoPath = await renderVideo(episode, audioPath, imagePaths);
+    await uploadToDropbox(videoPath);
+    console.log("\n✅ ALL DONE! Check your Dropbox CutTheBSNews folder.\n");
   } catch (err) {
     console.error("\n❌ Error:", err.message);
     console.error(err.stack);
