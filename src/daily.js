@@ -151,13 +151,23 @@ async function renderVideo(episode, audioPath) {
 }
 
 async function uploadToDrive(videoPath, title) {
-  console.log("\n📤  Step 4/4 — Saving video info...");
+  console.log("\n📤  Step 4/4 — Uploading to Dropbox...");
   const today = new Date().toISOString().split("T")[0];
-  const infoPath = path.join(OUTPUT, `episode_${today}.txt`);
-  fs.writeFileSync(infoPath, `Title: ${title}\nVideo: ${videoPath}\nDate: ${today}\n`);
-  console.log(`   ✅ Episode complete: ${videoPath}`);
-  console.log(`   📁 Video size: ${(fs.statSync(videoPath).size / 1024 / 1024).toFixed(1)} MB`);
-  return { name: path.basename(videoPath) };
+  const fileName = `CutTheBSNews_${today}.mp4`;
+  const fileBuffer = fs.readFileSync(videoPath);
+  const res = await fetch("https://content.dropboxapi.com/2/files/upload", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer sl.u.AGbz0KIHdUpYJYCRkgQEICqTAONxNSgLcS-03ekvj9BMd2dVYbV0rAInMDJetcaPvkh6AuDZUxv4Dr45iXUnnNpk97IlGDQwIHRKaV9bCjx36nF4BCs_bv2zPR5262nBKVSusKiU8X1s1Q7Tr4JZFU0HAEFLQKGLkDM2EOU7ZRgX7ArFJoGUqDoeRS44pUB3zBEXvU0aQxvWSkOI-zfT_T99vBWBuIhWYsOY1jM3NamgOROR_BvSIS7FepcNoQ2CRxBhM_SGP-ZQR6e_zq-EFk2eJkSV7girK3rlwJOv6g_sUt9jCf9jbZqj57i1R_2BuQFnDa_kWrPA6ghMsbSXO2esaH6aTKyDmP_meAt0zvlZYfL3Rwkjrbt8xCcKL7PF8w9tscEJVzIf6bqbe1MbfSfjk_ehzVZATybJ8tceHkJl_j8cPKzimwwOkL2pL7eaAYy_Zg7Jn-oMSL8z9UVyxTDwQxuxd4AYJn6eeMzZfO2-NQwbHQGBtsni6ToTM_KefcEck5URXLDcVgNJa22D1SuIh9L6EC1SpVOmWQuvs0Vsp8NuTYn82WwrDvF6yOJyS3ZzBc92r_OG8StdZaPOMXJWwvjhP2dGfkRS15ZogeF-dCtXknc5iej9koV7rU5CzIxKDMxOKiI-S9C52ZegIlWHdQ8F_LVe4IkvaHG0OJvQS_bxOCXxLIalCO6qY9h3yBhoHtaFKs-zrTdTH3iZD0pFnjizGJ-ygpWh4LK07AsOvMQ2B3iht_u7by9QaWeTtca0e96uLlkAt_7STmEYHQIT-TER8eZhFRUreh1s9rPAx7zBxQVSfoJ-Dpbf7IwEgW9Ogmj765iS6W21iGbIsGfhx63Zfty35lhvSt9MZKSV1d6ghJainl__L2MvJYl1ifWF0K2gRL3NYfbAGwSHg4-43CSiGjrrn3RL4Bn9dZMkViXXb13yRDY0RTv_TIVdOmdfEz371gGU0PE15V1pcHa-l7WsfWiLz7V4pceZGPyHuBgvM9Fh9PcqLU1yMP_RAEW3AkTqCtAcNc1Syp6lCPnerTbgEWuhfLYZHTprUA4A_G08GSry4WyejM102h2tnPQHgMZ4sBpTYHb58EiLMat1GQdQR0zC4dYUxFpdjZR7HwmR3gxivV3e2IsT_lY-OxI7wMILTBQB_5AUSdgeF_I35Y3oOdcNQSwI31DjZOWMxUGx4r26B_S8su5_NHWLkTbMn5orRczR2stbniXW8vLFJ_xVxG1dVYWUqrJXRczYxR9My8WnqD1i8rwwkwPx2jptaDL8nSJTUnhs-yAOhqMrIZbzMvQ14BJXUR0LW4JUtxQQ8anjL8CgIULb40WQM-IhsbldEfMQZcjBqmURVl_3tv3Ge8FHkPG6EEsoBaIxG9j-JnuKq2uu_vU14VQgfBc`,
+      "Dropbox-API-Arg": JSON.stringify({ path: `/CutTheBSNews/${fileName}`, mode: "overwrite", autorename: true }),
+      "Content-Type": "application/octet-stream",
+    },
+    body: fileBuffer,
+  });
+  if (!res.ok) throw new Error(`Dropbox upload failed: ${await res.text()}`);
+  const data = await res.json();
+  console.log(`   ✅ Uploaded to Dropbox: ${data.path_display}`);
+  return data;
 }
 
 async function run() {
