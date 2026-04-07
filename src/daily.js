@@ -151,22 +151,13 @@ async function renderVideo(episode, audioPath) {
 }
 
 async function uploadToDrive(videoPath, title) {
-  console.log("\n📤  Step 4/4 — Uploading to Google Drive...");
-  const auth = new google.auth.GoogleAuth({
-    credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT),
-    scopes: ["https://www.googleapis.com/auth/drive.file"],
-  });
-  const drive = google.drive({ version: "v3", auth });
+  console.log("\n📤  Step 4/4 — Saving video info...");
   const today = new Date().toISOString().split("T")[0];
-  const fileName = `CutTheBSNews_${today}.mp4`;
-  const res = await drive.files.create({
-    requestBody: { name: fileName, parents: [DRIVE_FOLDER_ID], mimeType: "video/mp4" },
-    media: { mimeType: "video/mp4", body: fs.createReadStream(videoPath) },
-    fields: "id, name, webViewLink",
-  });
-  console.log(`   ✅ Uploaded: ${res.data.name}`);
-  console.log(`   🔗 ${res.data.webViewLink}`);
-  return res.data;
+  const infoPath = path.join(OUTPUT, `episode_${today}.txt`);
+  fs.writeFileSync(infoPath, `Title: ${title}\nVideo: ${videoPath}\nDate: ${today}\n`);
+  console.log(`   ✅ Episode complete: ${videoPath}`);
+  console.log(`   📁 Video size: ${(fs.statSync(videoPath).size / 1024 / 1024).toFixed(1)} MB`);
+  return { name: path.basename(videoPath) };
 }
 
 async function run() {
