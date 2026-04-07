@@ -144,7 +144,8 @@ async function renderVideo(episode, audioPath) {
   fs.writeFileSync(scriptPath, `#!/bin/sh\n${ffmpegCmd}\n`);
   execSync(`chmod +x "${scriptPath}"`);
   console.log("   ⏳ Encoding video...");
-  execSync(`sh "${scriptPath}"`, { stdio: "inherit" });
+  execSync(`sh "${scriptPath}" || true`, { stdio: "inherit" });
+  if (!fs.existsSync(videoPath)) throw new Error("Video file was not created");
   console.log(`   ✅ Video saved.`);
   return videoPath;
 }
